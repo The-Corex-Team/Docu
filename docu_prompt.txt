@@ -1,0 +1,1674 @@
+You are a senior C++/Qt 6 desktop application architect and engineer.
+
+Your task is to design and implement a native desktop word-processing application called:
+
+                         DOCU
+
+Docu is a lightweight, classic, Windows-7/WordPad-inspired document editor. It should feel like a traditional desktop application rather than a modern web application or an Electron/Chromium-based application.
+
+The project must be written in:
+
+- C++
+- Qt 6
+- CMake
+- Qt Widgets
+
+Do NOT use Electron.
+Do NOT use a web frontend.
+Do NOT use Python for the application.
+Do NOT use QML unless explicitly requested later.
+Do NOT introduce unnecessary third-party frameworks.
+Prefer Qt's native APIs wherever possible.
+
+The application should have a clean, maintainable architecture and should be developed incrementally rather than as one enormous monolithic implementation.
+
+============================================================
+1. CORE PHILOSOPHY
+============================================================
+
+The most important requirement is architectural quality.
+
+Do NOT build the application as one giant MainWindow.cpp.
+
+Do NOT put document logic directly inside button callbacks.
+
+Do NOT tightly couple the GUI to file formats.
+
+Do NOT make the Ribbon/toolbar responsible for modifying document internals directly.
+
+Do NOT create a custom text engine when Qt already provides the required functionality.
+
+The application should be divided into logical layers:
+
+    GUI
+      ↓
+    Actions / Commands
+      ↓
+    Document Controller / Document Model
+      ↓
+    Qt document engine / object management
+      ↓
+    File I/O / serialization
+
+The GUI should be replaceable without destroying the document engine.
+
+The application should be designed so that future features can be added without restructuring the entire project.
+
+============================================================
+2. INITIAL VISUAL TARGET
+============================================================
+
+The visual inspiration is the classic Windows WordPad interface.
+
+The main window should contain:
+
+    File
+    Home
+    View
+
+The Home tab should contain sections similar to:
+
+    Clipboard
+    Font
+    Paragraph
+    Insert
+
+The application should have a classic desktop appearance.
+
+The main editing area should display a real A4 page rather than an infinite white canvas.
+
+Conceptually:
+
+    ┌─────────────────────────────────────────────────────┐
+    │ File      Home      View                            │
+    ├─────────────────────────────────────────────────────┤
+    │ Clipboard │ Font │ Paragraph │ Insert              │
+    │           │      │           │                     │
+    ├─────────────────────────────────────────────────────┤
+    │                                                     │
+    │            ┌────────────────────────┐               │
+    │            │                        │               │
+    │            │                        │               │
+    │            │       A4 DOCUMENT      │               │
+    │            │                        │               │
+    │            │                        │               │
+    │            └────────────────────────┘               │
+    │                                                     │
+    └─────────────────────────────────────────────────────┘
+
+The page should visually resemble a sheet of paper on a desktop background.
+
+The page itself must have a fixed logical A4 size.
+
+Zoom should affect the VIEW, not change the underlying document dimensions.
+
+============================================================
+3. A4 PAGE MODEL
+============================================================
+
+Use A4 dimensions:
+
+    210 mm × 297 mm
+
+The internal document representation should use an appropriate Qt logical coordinate system.
+
+A4 in points is approximately:
+
+    595.28 × 841.89 pt
+
+Do not simply make an infinitely expanding QTextEdit and call it A4.
+
+The document should understand that it is a page-oriented document.
+
+We need:
+
+    Page width
+    Page height
+    Margins
+    Page orientation
+    Zoom
+
+Initially:
+
+    A4
+    Portrait
+    Reasonable default margins
+
+Later the architecture should allow:
+
+    A4 Portrait
+    A4 Landscape
+    Other paper sizes
+    Custom page sizes
+
+without rewriting the editor.
+
+============================================================
+4. USE QT'S TEXT ENGINE
+============================================================
+
+Do NOT implement a custom text rendering engine.
+
+Use Qt's existing rich-text infrastructure wherever appropriate.
+
+Important Qt classes include:
+
+    QTextDocument
+    QTextEdit / QTextCursor
+    QTextCharFormat
+    QTextBlockFormat
+    QTextFrameFormat
+    QTextImageFormat
+    QFont
+    QPageSize
+    QPageLayout
+    QPrinter
+
+Use Qt's text engine for:
+
+    text layout
+    cursor
+    selection
+    text formatting
+    paragraphs
+    copy/paste
+    undo/redo
+    font handling
+    basic rich text
+    text rendering
+
+Our own Document class should provide an abstraction around QTextDocument rather than reinventing it.
+
+Conceptually:
+
+    Document
+        |
+        +-- QTextDocument
+        |
+        +-- PageSettings
+        |
+        +-- metadata
+        |
+        +-- object management
+        |
+        +-- file state
+
+============================================================
+5. DOCUMENT MODEL
+============================================================
+
+Create a logical Document class.
+
+It should represent the document being edited.
+
+Conceptually:
+
+    class Document
+
+Responsibilities should include things such as:
+
+    document lifecycle
+    modification state
+    page settings
+    access to QTextDocument
+    document operations
+    metadata
+
+The GUI should not directly manipulate every internal detail of QTextDocument.
+
+Instead, provide appropriate document operations and controllers.
+
+For example:
+
+    setBold()
+    setItalic()
+    setUnderline()
+    setFontFamily()
+    setFontSize()
+    setAlignment()
+    insertImage()
+
+The exact API can be designed by you, but maintain clear boundaries.
+
+============================================================
+6. TEXT FORMATTING
+============================================================
+
+Basic formatting must include:
+
+    Bold
+    Italic
+    Underline
+    Font family
+    Font size
+
+Eventually:
+
+    Text color
+    Highlight color
+    Alignment
+    Bullets
+    Numbering
+    Indentation
+    Line spacing
+    Paragraph spacing
+
+Do not create a separate custom Text object for every character or word.
+
+Do NOT do this:
+
+    TextObject
+    TextObject
+    TextObject
+    TextObject
+    ...
+
+Instead, use QTextCursor and QTextCharFormat.
+
+Formatting should apply to selections or the current cursor position.
+
+Example conceptual behavior:
+
+    User selects "Hello"
+            ↓
+    presses Bold
+            ↓
+    ActionManager receives "bold"
+            ↓
+    DocumentController applies QTextCharFormat
+            ↓
+    QTextDocument updates
+            ↓
+    View updates
+
+The toolbar should reflect the formatting state of the current selection.
+
+For example:
+
+    If cursor is inside bold text:
+        Bold button = active
+
+    If cursor is inside normal text:
+        Bold button = inactive
+
+============================================================
+7. ACTION SYSTEM
+============================================================
+
+Create a centralized ActionManager or equivalent system.
+
+This is extremely important.
+
+Actions should have stable identifiers.
+
+Examples:
+
+    new
+    open
+    save
+    saveAs
+    print
+    undo
+    redo
+
+    cut
+    copy
+    paste
+
+    bold
+    italic
+    underline
+
+    fontFamily
+    fontSize
+
+    alignLeft
+    alignCenter
+    alignRight
+    alignJustify
+
+    insertImage
+
+The same action should be usable by:
+
+    menu item
+    toolbar button
+    keyboard shortcut
+    context menu
+    future command palette
+
+Do NOT implement separate logic for:
+
+    toolbar Bold button
+    menu Bold item
+    keyboard Ctrl+B
+
+All of them should trigger the same logical action.
+
+Conceptually:
+
+    Keyboard shortcut
+          \
+    Toolbar button ----> Action ----> Document
+          /
+    Menu item
+
+This prevents duplicated logic.
+
+============================================================
+8. JSON-BASED GUI CONFIGURATION
+============================================================
+
+The application should support a configuration-driven GUI for tabs/sections/actions.
+
+Use JSON initially.
+
+Qt already provides:
+
+    QJsonDocument
+    QJsonObject
+    QJsonArray
+
+Do not introduce YAML unless there is a strong technical reason.
+
+The configuration should describe the GUI structure, not contain the actual document logic.
+
+For example, conceptually:
+
+{
+    "tabs": [
+        {
+            "name": "Home",
+            "sections": [
+                {
+                    "name": "Clipboard",
+                    "actions": [
+                        "paste",
+                        "cut",
+                        "copy"
+                    ]
+                },
+                {
+                    "name": "Font",
+                    "actions": [
+                        "font_family",
+                        "font_size",
+                        "bold",
+                        "italic",
+                        "underline"
+                    ]
+                }
+            ]
+        }
+    ]
+}
+
+The exact schema can be improved.
+
+The important rule is:
+
+JSON says:
+
+    "put this action here"
+
+C++ says:
+
+    "this is what this action does"
+
+The JSON must NOT contain executable logic.
+
+============================================================
+9. RIBBON / TOP PANEL ARCHITECTURE
+============================================================
+
+Create separate GUI components rather than putting everything into MainWindow.
+
+Possible structure:
+
+    Ribbon
+        |
+        +-- RibbonTab
+                |
+                +-- RibbonSection
+                        |
+                        +-- QAction / widgets
+
+Potential files:
+
+    Ribbon.h
+    Ribbon.cpp
+
+    RibbonTab.h
+    RibbonTab.cpp
+
+    RibbonSection.h
+    RibbonSection.cpp
+
+The exact implementation is up to you.
+
+The important thing is separation.
+
+MainWindow should primarily assemble the application.
+
+It should not contain hundreds of lines defining every individual button.
+
+============================================================
+10. IMAGE SUPPORT
+============================================================
+
+Images are a major part of Docu.
+
+Eventually users should be able to:
+
+    Insert an image
+    Select an image
+    Resize an image
+    Move an image
+    Rotate an image
+    Delete an image
+
+Selection should visually show handles.
+
+Conceptually:
+
+          ●────────────●
+          │            │
+          │    IMAGE   │
+          │            │
+          ●────────────●
+                ↻
+
+The image should have properties conceptually such as:
+
+    image data
+    position
+    size
+    rotation
+    aspect ratio behavior
+    anchor
+    wrapping mode
+
+Do NOT implement all image functionality at once.
+
+Development order:
+
+    1. Insert image
+    2. Display image
+    3. Select image
+    4. Resize image
+    5. Delete image
+    6. Move image
+    7. Rotation
+    8. Aspect-ratio locking
+    9. Text wrapping
+
+Initially, simple inline image support using QTextDocument is acceptable.
+
+As more advanced image manipulation is introduced, use an ObjectManager or suitable abstraction.
+
+Do not prematurely build a gigantic graphics framework.
+
+============================================================
+11. OBJECT MODEL
+============================================================
+
+Text and images are different types of content.
+
+Conceptually:
+
+    FLOW CONTENT
+
+        Text
+        Paragraphs
+        Lists
+
+    OBJECT CONTENT
+
+        Images
+        Shapes
+        Future objects
+
+Design the architecture so that future objects can be added.
+
+Potential conceptual architecture:
+
+    ObjectManager
+        |
+        +-- ImageObject
+        +-- ShapeObject
+        +-- FutureObject
+
+Do not over-engineer this during the first milestone.
+
+============================================================
+12. SELECTION SYSTEM
+============================================================
+
+Selection should be treated as an explicit concept.
+
+The application needs to know whether the user has selected:
+
+    text
+    image
+    nothing
+
+For text selection:
+
+    start position
+    end position
+
+For image selection:
+
+    selected object
+    bounding rectangle
+    handles
+    rotation state
+
+The Home tab should be able to react to selection state.
+
+For example:
+
+    Text selected:
+        show font controls
+
+    Image selected:
+        eventually show image controls
+
+    Nothing selected:
+        show default document state
+
+============================================================
+13. COMMAND / UNDO ARCHITECTURE
+============================================================
+
+Undo/redo is critical.
+
+The application should be designed around reversible document operations.
+
+Potential commands:
+
+    InsertText
+    DeleteText
+    ApplyBold
+    ApplyItalic
+    ApplyUnderline
+    ChangeFont
+    ChangeFontSize
+
+    InsertImage
+    DeleteImage
+    ResizeImage
+    MoveImage
+    RotateImage
+
+Qt's QTextDocument already provides useful undo/redo functionality.
+
+Do not unnecessarily replace Qt's built-in text undo system.
+
+For custom document operations, consider using:
+
+    QUndoStack
+    QUndoCommand
+
+when appropriate.
+
+Conceptually:
+
+    User action
+          ↓
+       Command
+          ↓
+      Document
+          ↓
+      QUndoStack
+
+This should allow:
+
+    Ctrl+Z
+    Ctrl+Y
+
+and eventually toolbar/menu Undo/Redo.
+
+============================================================
+14. FILE ARCHITECTURE
+============================================================
+
+Separate document representation from file I/O.
+
+Do NOT put save/open implementation directly inside MainWindow.
+
+Create a file I/O layer.
+
+Conceptually:
+
+    Document
+       |
+       +---- DocumentReader
+       |
+       +---- DocumentWriter
+
+Eventually support:
+
+    Docu native format
+    RTF
+    HTML
+    TXT
+    PDF export
+    Printing
+
+The native Docu format should eventually be designed around preserving:
+
+    text
+    formatting
+    images
+    page settings
+    object positions
+    metadata
+
+Do not design the final .docu format prematurely.
+
+For the first milestone, it is acceptable to use a temporary format or Qt-supported rich text format while the architecture is being established.
+
+============================================================
+15. DOCUMENT STATE
+============================================================
+
+The application needs to distinguish:
+
+    New document
+    Open document
+    Modified document
+    Saved document
+
+The Document should have a modified state.
+
+The window title should eventually reflect modification status.
+
+For example:
+
+    Document - Docu
+
+and:
+
+    Document* - Docu
+
+or another appropriate convention.
+
+When closing a modified document:
+
+    Save
+    Don't Save
+    Cancel
+
+should eventually be available.
+
+============================================================
+16. VIEW VS DOCUMENT
+============================================================
+
+This is critical.
+
+The document is NOT the view.
+
+The page representation is NOT the document itself.
+
+For example:
+
+    Document
+        = actual content
+
+    DocumentView
+        = how content is displayed
+
+This allows:
+
+    50% zoom
+    100% zoom
+    150% zoom
+
+without changing the document.
+
+It also allows future features such as:
+
+    print preview
+    page preview
+    different display modes
+
+without changing the underlying document.
+
+============================================================
+17. ZOOM
+============================================================
+
+Implement zoom as a view-level feature.
+
+Potential controls:
+
+    Zoom In
+    Zoom Out
+    Zoom percentage
+    Fit Page
+    Fit Width
+
+The status bar could eventually display:
+
+    100%
+
+Do not modify the actual document's A4 dimensions when zoom changes.
+
+============================================================
+18. PRINTING AND PDF
+============================================================
+
+Eventually support:
+
+    Print
+    Print Preview
+    Export to PDF
+
+Use Qt's native printing APIs where possible:
+
+    QPrinter
+    QPrintDialog
+    QPrintPreviewDialog
+
+Do not create a custom PDF renderer unless necessary.
+
+The same document layout should ideally be usable for:
+
+    screen
+    print
+    PDF
+
+============================================================
+19. SOURCE TREE
+============================================================
+
+Start with a clean structure similar to:
+
+    Docu/
+    │
+    ├── CMakeLists.txt
+    │
+    ├── resources/
+    │   ├── icons/
+    │   └── ui/
+    │       └── ribbon.json
+    │
+    ├── src/
+    │   │
+    │   ├── main.cpp
+    │   │
+    │   ├── app/
+    │   │   ├── Application.cpp
+    │   │   └── Application.h
+    │   │
+    │   ├── gui/
+    │   │   ├── MainWindow.cpp
+    │   │   ├── MainWindow.h
+    │   │   │
+    │   │   ├── Ribbon/
+    │   │   │   ├── Ribbon.cpp
+    │   │   │   ├── Ribbon.h
+    │   │   │   ├── RibbonTab.cpp
+    │   │   │   ├── RibbonTab.h
+    │   │   │   ├── RibbonSection.cpp
+    │   │   │   └── RibbonSection.h
+    │   │   │
+    │   │   └── Editor/
+    │   │       ├── DocumentView.cpp
+    │   │       └── DocumentView.h
+    │   │
+    │   ├── document/
+    │   │   ├── Document.cpp
+    │   │   ├── Document.h
+    │   │   ├── PageSettings.cpp
+    │   │   ├── PageSettings.h
+    │   │   ├── ImageObject.cpp
+    │   │   └── ImageObject.h
+    │   │
+    │   ├── actions/
+    │   │   ├── ActionManager.cpp
+    │   │   ├── ActionManager.h
+    │   │   ├── FileActions.cpp
+    │   │   └── TextActions.cpp
+    │   │
+    │   └── io/
+    │       ├── DocumentReader.cpp
+    │       ├── DocumentReader.h
+    │       ├── DocumentWriter.cpp
+    │       └── DocumentWriter.h
+    │
+    └── docs/
+
+Do not create all of these files immediately if they are not needed.
+
+The structure is a target architecture, not a demand to generate hundreds of empty files.
+
+============================================================
+20. CMAKE
+============================================================
+
+Use modern CMake.
+
+The project should have a clean CMakeLists.txt.
+
+Use Qt 6 components appropriately, likely:
+
+    Core
+    Gui
+    Widgets
+    PrintSupport
+
+depending on which features are implemented.
+
+Use:
+
+    CMAKE_CXX_STANDARD 17
+
+or a newer standard only if justified.
+
+Prefer modern target-based CMake.
+
+Avoid global compiler flags whenever possible.
+
+The project must build cleanly using:
+
+    cmake -S . -B build
+    cmake --build build
+
+============================================================
+21. RESOURCE MANAGEMENT
+============================================================
+
+Use Qt resources for application assets where appropriate.
+
+Potential structure:
+
+    resources/
+        icons/
+        ui/
+
+The JSON configuration may be embedded into the application using Qt resources.
+
+Do not rely on random working-directory-relative paths.
+
+============================================================
+22. GUI STYLE
+============================================================
+
+The visual direction should be:
+
+    classic
+    clean
+    desktop-oriented
+    lightweight
+    functional
+    familiar
+
+Avoid:
+
+    excessive rounded cards
+    giant modern web-app controls
+    unnecessary animations
+    huge empty margins
+    modern dashboard aesthetics
+    Chromium-like UI
+    web-style navigation
+
+The application should feel like something that could naturally belong on a traditional Windows desktop.
+
+The GUI does not need to perfectly clone WordPad.
+
+It should be inspired by the usability principles of classic desktop editors.
+
+============================================================
+23. PERFORMANCE
+============================================================
+
+The application should remain lightweight.
+
+Avoid unnecessary:
+
+    threads
+    processes
+    background services
+    network operations
+    JavaScript engines
+    webviews
+    huge dependencies
+
+A document editor should not need an enormous runtime.
+
+Use Qt's existing efficient primitives.
+
+Do not optimize prematurely.
+
+First achieve correctness and clean architecture.
+
+============================================================
+24. ERROR HANDLING
+============================================================
+
+File operations must fail gracefully.
+
+Examples:
+
+    Failed to open file
+    Failed to save file
+    Invalid document
+    Unsupported format
+    Image loading failure
+
+Do not crash the application because a file cannot be opened.
+
+Use appropriate Qt error reporting mechanisms.
+
+User-facing errors should be understandable.
+
+Developer-facing diagnostics should be useful.
+
+============================================================
+25. LOGGING
+============================================================
+
+Use Qt logging where useful:
+
+    qDebug()
+    qWarning()
+    qCritical()
+
+Do not spam the console.
+
+Potential categories can eventually be introduced:
+
+    docu.app
+    docu.document
+    docu.io
+    docu.gui
+
+============================================================
+26. TESTABILITY
+============================================================
+
+Keep document logic testable without launching the entire GUI.
+
+Potential future unit tests:
+
+    A4 page defaults
+    formatting
+    document modification state
+    file serialization
+    image insertion
+    image resizing
+    command undo/redo
+
+Do not put all logic into QWidget subclasses.
+
+============================================================
+27. DEVELOPMENT METHODOLOGY
+============================================================
+
+THIS IS VERY IMPORTANT:
+
+Do NOT attempt to implement every feature in one response.
+
+Build Docu incrementally.
+
+Each milestone must compile before moving to the next.
+
+After each meaningful implementation:
+
+    1. Explain what changed.
+    2. Show the files changed.
+    3. Build the project.
+    4. Fix compiler errors.
+    5. Verify the architecture.
+    6. Only then continue.
+
+Do not generate enormous speculative code that has never been compiled.
+
+Prefer small, working increments.
+
+============================================================
+28. INITIAL MILESTONE
+============================================================
+
+The FIRST milestone should ONLY implement the GUI foundation.
+
+Implement:
+
+    Qt 6
+    C++
+    CMake
+    QMainWindow
+
+Create:
+
+    File
+    Home
+    View
+
+tabs.
+
+Create the Home sections:
+
+    Clipboard
+    Font
+    Paragraph
+    Insert
+
+Create an editor area with:
+
+    centered A4 page
+    white page
+    visible page boundary
+    desktop/background area
+    reasonable margins
+
+The page should be visually centered.
+
+Implement basic zoom infrastructure if it does not complicate the first milestone.
+
+DO NOT implement yet:
+
+    image rotation
+    image handles
+    custom file format
+    PDF export
+    advanced text formatting
+    complicated command architecture
+
+The first milestone is about establishing the GUI and page layout correctly.
+
+============================================================
+29. SECOND MILESTONE
+============================================================
+
+After the first GUI milestone works:
+
+Implement the text editing engine.
+
+Use:
+
+    QTextDocument
+    QTextCursor
+    QTextCharFormat
+    QTextBlockFormat
+    QTextEdit or a suitable custom document view
+
+Support:
+
+    typing
+    selection
+    copy
+    paste
+    cut
+    undo
+    redo
+
+Then add:
+
+    bold
+    italic
+    underline
+    font family
+    font size
+
+Make the Home controls functional.
+
+============================================================
+30. THIRD MILESTONE
+============================================================
+
+Implement page behavior:
+
+    A4
+    margins
+    page boundaries
+    multiple pages
+    zoom
+    page layout
+
+The document should behave like a real document rather than an infinite text area.
+
+============================================================
+31. FOURTH MILESTONE
+============================================================
+
+Implement image insertion.
+
+Start simple:
+
+    Insert → Picture
+    file dialog
+    image loaded
+    image inserted
+
+Then selection.
+
+Then resizing.
+
+Then movement.
+
+Then rotation.
+
+Then wrapping.
+
+Do not attempt all image features simultaneously.
+
+============================================================
+32. FIFTH MILESTONE
+============================================================
+
+Implement ActionManager and JSON-driven UI.
+
+The GUI should no longer need to hardcode every toolbar/menu relationship.
+
+Example:
+
+    ribbon.json
+
+describes:
+
+    File
+    Home
+    View
+    sections
+    actions
+
+ActionManager maps:
+
+    "bold"
+    "italic"
+    "save"
+    "insertImage"
+
+to actual QAction or command behavior.
+
+============================================================
+33. SIXTH MILESTONE
+============================================================
+
+Implement document I/O.
+
+Start with:
+
+    New
+    Open
+    Save
+    Save As
+
+Then design the native Docu format.
+
+Keep serialization separate from GUI.
+
+============================================================
+34. SEVENTH MILESTONE
+============================================================
+
+Implement:
+
+    Print
+    Print Preview
+    PDF Export
+
+using Qt's printing infrastructure.
+
+============================================================
+35. CODE QUALITY RULES
+============================================================
+
+Follow these rules throughout the project.
+
+Use:
+
+    clear class names
+    clear ownership
+    RAII
+    smart pointers where appropriate
+    Qt parent-child ownership where appropriate
+    const correctness
+    namespaces where useful
+    forward declarations where appropriate
+    small methods
+    meaningful comments
+
+Avoid:
+
+    global variables
+    giant classes
+    giant switch statements
+    duplicated action logic
+    magic numbers
+    unexplained constants
+    excessive macros
+    unnecessary singleton patterns
+    unnecessary inheritance
+    premature abstraction
+
+Do not create an abstraction merely because "architecture".
+
+Every class should have a clear responsibility.
+
+============================================================
+36. OWNERSHIP
+============================================================
+
+Be deliberate about object ownership.
+
+Qt parent-child ownership is acceptable and encouraged where appropriate.
+
+For non-QObject objects, use:
+
+    std::unique_ptr
+    std::shared_ptr
+
+only where ownership semantics justify them.
+
+Do not randomly use shared_ptr everywhere.
+
+============================================================
+37. THREADING
+============================================================
+
+Do not introduce threading unless there is a concrete reason.
+
+The initial editor should remain single-threaded.
+
+Later, potentially expensive operations may be evaluated for asynchronous execution.
+
+Do not make the architecture unnecessarily complicated.
+
+============================================================
+38. SECURITY / FILE SAFETY
+============================================================
+
+Documents and images are external input.
+
+Do not execute anything from document files.
+
+Do not treat document content as code.
+
+Validate file formats where appropriate.
+
+Avoid unsafe assumptions about image data.
+
+============================================================
+39. USER EXPERIENCE
+============================================================
+
+Docu should behave like a traditional desktop editor.
+
+Keyboard shortcuts should eventually include:
+
+    Ctrl+N
+    Ctrl+O
+    Ctrl+S
+    Ctrl+Shift+S
+    Ctrl+P
+
+    Ctrl+Z
+    Ctrl+Y
+
+    Ctrl+X
+    Ctrl+C
+    Ctrl+V
+
+    Ctrl+B
+    Ctrl+I
+    Ctrl+U
+
+The UI should provide visual feedback for active formatting.
+
+============================================================
+40. FUTURE EXTENSIBILITY
+============================================================
+
+The architecture should leave room for:
+
+    tables
+    shapes
+    hyperlinks
+    headers
+    footers
+    page numbers
+    bullets
+    numbering
+    spell checking
+    search/replace
+    multiple document windows
+    tabs
+    themes
+    dark mode
+    custom keyboard shortcuts
+    recent documents
+    autosave
+    crash recovery
+    plugins/extensions
+
+DO NOT implement these now.
+
+Just avoid architectural decisions that make them impossible later.
+
+============================================================
+41. IMPORTANT DESIGN PRINCIPLE
+============================================================
+
+Do not confuse "future extensibility" with "build everything now."
+
+We want:
+
+    SIMPLE NOW
+    EXTENSIBLE LATER
+
+not:
+
+    EXTREMELY COMPLEX NOW
+    MAYBE USEFUL LATER
+
+The initial implementation should be small and understandable.
+
+============================================================
+42. MAIN WINDOW RESPONSIBILITY
+============================================================
+
+MainWindow should primarily coordinate the major GUI components.
+
+Conceptually:
+
+    MainWindow
+        |
+        +-- Ribbon
+        |
+        +-- DocumentView
+        |
+        +-- StatusBar
+        |
+        +-- DocumentController
+
+It should NOT contain:
+
+    document serialization logic
+    image manipulation algorithms
+    formatting implementation
+    dozens of independent button callbacks
+
+============================================================
+43. DOCUMENT CONTROLLER
+============================================================
+
+Consider a DocumentController layer between the GUI and Document.
+
+Conceptually:
+
+    GUI
+      ↓
+    Action
+      ↓
+    DocumentController
+      ↓
+    Document
+      ↓
+    QTextDocument
+
+The controller can coordinate:
+
+    selection
+    commands
+    document operations
+    GUI state updates
+
+Use this only where it provides real value.
+
+Do not create unnecessary indirection.
+
+============================================================
+44. STATUS BAR
+============================================================
+
+Eventually the status bar should provide information such as:
+
+    Page 1 of 1
+    Words: 123
+    Characters: 742
+    Zoom: 100%
+
+This does not need to be implemented in the first milestone.
+
+============================================================
+45. FILE DIALOGS
+============================================================
+
+Use native Qt file dialogs:
+
+    QFileDialog
+
+Eventually provide filters such as:
+
+    Docu Documents
+    Rich Text
+    Text Files
+    All Files
+
+Do not hardcode operating-system-specific file dialog implementations.
+
+============================================================
+46. ICONS
+============================================================
+
+Initially placeholders are acceptable.
+
+Do not spend the first development phase creating hundreds of icons.
+
+The architecture should allow icons to be associated with actions.
+
+For example:
+
+    QAction
+        |
+        +-- icon
+        +-- text
+        +-- shortcut
+        +-- tooltip
+        +-- triggered behavior
+
+============================================================
+47. TOOLTIP / ACCESSIBILITY
+============================================================
+
+Eventually buttons should have:
+
+    tooltip
+    accessible name
+    keyboard shortcut
+
+Do not neglect accessibility completely.
+
+Qt's accessibility support should be used where appropriate.
+
+============================================================
+48. NO VIBE CODING
+============================================================
+
+You are expected to reason about the architecture before generating implementation.
+
+If there are multiple reasonable Qt approaches, explain the tradeoff briefly and choose one.
+
+Do not blindly generate code.
+
+Do not invent Qt APIs.
+
+If uncertain about a Qt 6 API, verify the actual API before using it.
+
+Prefer official Qt functionality over custom implementations.
+
+============================================================
+49. WHEN GENERATING CODE
+============================================================
+
+When you implement a milestone:
+
+First explain:
+
+    What we are building
+    Why this architecture is being used
+    Which files are being created/modified
+
+Then provide the implementation.
+
+Keep each file complete and internally consistent.
+
+Do not show fragments that cannot compile unless explicitly explaining pseudocode.
+
+After implementation, provide:
+
+    build command
+    run command
+    expected result
+    next milestone
+
+If compilation errors are encountered, fix them before proceeding.
+
+============================================================
+50. DO NOT REWRITE WORKING CODE WITHOUT A REASON
+============================================================
+
+Once a component works, do not randomly rewrite it because another implementation looks "cleaner."
+
+Prefer incremental modifications.
+
+Preserve working behavior.
+
+When refactoring becomes necessary:
+
+    explain why
+    identify affected files
+    perform the refactor carefully
+
+============================================================
+51. FIRST TASK
+============================================================
+
+Start NOW with Milestone 1 only.
+
+Create the initial Docu Qt 6/CMake project.
+
+The first implementation should provide:
+
+    MainWindow
+    File tab
+    Home tab
+    View tab
+
+Home should contain:
+
+    Clipboard
+    Font
+    Paragraph
+    Insert
+
+The center of the window should contain a visually convincing A4 page.
+
+The page should be:
+
+    white
+    portrait
+    centered
+    bounded
+    visually separate from the surrounding application background
+
+The page should not fill the entire window.
+
+Use a suitable document/view architecture so the page can later become the actual document editor.
+
+Create a clean project structure.
+
+Make sure the project compiles.
+
+DO NOT jump ahead and implement the entire word processor.
+
+============================================================
+52. RESPONSE FORMAT
+============================================================
+
+For each development step, respond in this structure:
+
+    1. PLAN
+       Briefly explain what is being implemented.
+
+    2. ARCHITECTURE
+       Explain which classes/components are involved.
+
+    3. FILE TREE
+       Show the current project structure.
+
+    4. IMPLEMENTATION
+       Provide the required code.
+
+    5. BUILD
+       Give exact CMake/build commands.
+
+    6. VERIFICATION
+       Explain what should appear/work.
+
+    7. NEXT STEP
+       State what should be implemented next.
+
+Do not skip compilation/verification reasoning.
+
+============================================================
+53. FINAL PRINCIPLE
+============================================================
+
+Docu is intended to become a real, maintainable native desktop word processor.
+
+Think like a software engineer building a real application, not like a code generator producing a demo.
+
+Prioritize:
+
+    correctness
+    maintainability
+    separation of concerns
+    Qt-native architecture
+    incremental development
+    predictable behavior
+    clean source code
+    low dependency count
+    classic desktop usability
+
+The most important architectural relationship is:
+
+                         ┌─────────────┐
+                         │     GUI     │
+                         └──────┬──────┘
+                                │
+                                ▼
+                         ┌─────────────┐
+                         │   Actions   │
+                         └──────┬──────┘
+                                │
+                                ▼
+                    ┌─────────────────────┐
+                    │ Document Controller │
+                    └──────────┬──────────┘
+                               │
+                               ▼
+                    ┌─────────────────────┐
+                    │      Document       │
+                    │                     │
+                    │   QTextDocument    │
+                    │   PageSettings      │
+                    │   Objects           │
+                    └──────────┬──────────┘
+                               │
+                 ┌─────────────┴────────────┐
+                 ▼                          ▼
+          ┌─────────────┐            ┌─────────────┐
+          │   Text      │            │   Images    │
+          │   Layout    │            │   Objects   │
+          └─────────────┘            └─────────────┘
+
+Build this system carefully, one working milestone at a time.
+
+START WITH MILESTONE 1.

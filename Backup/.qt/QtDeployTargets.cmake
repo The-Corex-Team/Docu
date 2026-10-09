@@ -1,0 +1,7 @@
+set(__QT_DEPLOY_TARGETS "Docu;DocuResizeInvariantCheck;DocuImageInsertionCheck")
+set(__QT_DEPLOY_TARGET_Docu_FILE /root/Projects/Docu/Backup/Docu)
+set(__QT_DEPLOY_TARGET_Docu_TYPE EXECUTABLE)
+set(__QT_DEPLOY_TARGET_DocuResizeInvariantCheck_FILE /root/Projects/Docu/Backup/DocuResizeInvariantCheck)
+set(__QT_DEPLOY_TARGET_DocuResizeInvariantCheck_TYPE EXECUTABLE)
+set(__QT_DEPLOY_TARGET_DocuImageInsertionCheck_FILE /root/Projects/Docu/Backup/DocuImageInsertionCheck)
+set(__QT_DEPLOY_TARGET_DocuImageInsertionCheck_TYPE EXECUTABLE)

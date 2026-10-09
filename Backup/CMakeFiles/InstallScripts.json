@@ -1,0 +1,7 @@
+{
+	"InstallScripts" : 
+	[
+		"/root/Projects/Docu/Backup/cmake_install.cmake"
+	],
+	"Parallel" : false
+}
